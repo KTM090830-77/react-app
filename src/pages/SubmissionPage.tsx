@@ -13,18 +13,14 @@ export default function SubmissionPage() {
   useEffect(() => {
     
     const load = async () => {
-      // 1️⃣ 로그인 세션에서 Google access token 가져오기
       const token = localStorage.getItem("classroom_token");
       if (!token) {
       console.warn("classroom_token 없음");
       setLoading(false);
       return;
       }
-      // 2️⃣ 내가 속한 수업 가져오기
       const courseResult = await fetchCourses(token);
       const courses = courseResult.courses ?? [];
-
-      // 3️⃣ 모든 수업의 수행평가 가져오기
       const allAssignments: any[] = [];
 
       for (const course of courses) {
@@ -46,7 +42,7 @@ export default function SubmissionPage() {
     load();
   }, []);
 
-  if (loading) return <div>불러오는 중...</div>;
+  if (loading) return <div>수행평가를 불러오는 중...</div>;
 
   return (
     <div className="page">
