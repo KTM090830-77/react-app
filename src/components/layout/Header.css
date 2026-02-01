@@ -1,0 +1,41 @@
+.header {
+  background: #2563eb;
+  color: white;
+}
+
+.header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.nav a {
+  margin-left: 24px;
+  opacity: 0.8;
+}
+
+.nav a.active {
+  opacity: 1;
+  font-weight: 600;
+}
+.logout-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid #ddd;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.logout-btn:hover {
+  background: #f3f4f6;
+}
