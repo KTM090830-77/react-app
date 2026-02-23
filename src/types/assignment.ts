@@ -8,4 +8,18 @@ export interface Assignment {
   dDay: number;
   status: "NOT_SUBMITTED" | "SUBMITTED";
   score?: number;
+  courseName?: string;
+  courseId?: string;
+  submissionDate?: string;
+  submissionId?: string;
+}
+
+export interface Attachment {
+  driveFile?: {
+    driveFile?: {
+      id: string;
+      title: string;
+    };
+    shareMode: string;
+  };
 }

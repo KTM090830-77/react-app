@@ -1,23 +1,173 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { fetchCourses, fetchCourseWork, getValidToken } from "../lib/classroom";
+import { sendDailyDeadlineNotification } from "../lib/email";
+import type { Assignment } from "../types/assignment";
 
 export default function SettingsPage() {
   const [submitAlert, setSubmitAlert] = useState(true);
   const [deadlineAlert, setDeadlineAlert] = useState(true);
   const [emailAlert, setEmailAlert] = useState(false);
+  const [notificationTime, setNotificationTime] = useState(9); // 기본 9시
+  const [notificationEmail, setNotificationEmail] = useState(""); // 알림 이메일 주소
   const [darkMode, setDarkMode] = useState(false);
   const [simpleView, setSimpleView] = useState(false);
   const [twoFactor, setTwoFactor] = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+
+  // 과제 데이터 로드
+  useEffect(() => {
+    const loadAssignments = async () => {
+      const token = getValidToken();
+      if (!token) return;
+
+      const courseResult = await fetchCourses(token);
+      const courses = courseResult.courses ?? [];
+      const allAssignments: Assignment[] = [];
+
+      for (const course of courses) {
+        const workResult = await fetchCourseWork(token, course.id);
+        const works = workResult.courseWork ?? [];
+
+        const assignmentPromises = works.map(async (w: any) => {
+          let dueAt = "마감일 없음";
+          let dDay = 0;
+          if (w.dueDate && w.dueTime && 
+              typeof w.dueDate.year === 'number' && 
+              typeof w.dueDate.month === 'number' && 
+              typeof w.dueDate.day === 'number' &&
+              typeof w.dueTime.hours === 'number' && 
+              typeof w.dueTime.minutes === 'number') {
+            try {
+              const dueDate = new Date(Date.UTC(
+                w.dueDate.year,
+                w.dueDate.month - 1,
+                w.dueDate.day,
+                w.dueTime.hours,
+                w.dueTime.minutes
+              ));
+              
+              // 유효한 날짜인지 확인
+              if (isNaN(dueDate.getTime())) {
+                console.warn('Invalid due date for assignment:', w.title, w.dueDate, w.dueTime);
+                return {
+                  id: w.id,
+                  title: w.title,
+                  subject: course.name,
+                  dueAt,
+                  dDay,
+                  status: "pending" as const,
+                };
+              }
+
+              dueAt = dueDate.toISOString();
+              const now = new Date();
+              const diffTime = dueDate.getTime() - now.getTime();
+              dDay = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            } catch (error) {
+              console.warn('Error parsing due date for assignment:', w.title, error);
+            }
+          }
+
+          return {
+            id: w.id,
+            title: w.title,
+            subject: course.name,
+            dueAt,
+            dDay,
+            status: "pending" as const,
+          };
+        });
+
+        const courseAssignments = await Promise.all(assignmentPromises);
+        allAssignments.push(...courseAssignments);
+      }
+
+      setAssignments(allAssignments);
+    };
+
+    loadAssignments();
+  }, []);
+
+  // 설정 불러오기
+  useEffect(() => {
+    const savedNotificationTime = localStorage.getItem('notificationTime');
+    if (savedNotificationTime) {
+      setNotificationTime(Number(savedNotificationTime));
+    }
+    const savedNotificationEmail = localStorage.getItem('notificationEmail');
+    if (savedNotificationEmail) {
+      setNotificationEmail(savedNotificationEmail);
+    }
+  }, []);
 
   const classroomConnected = !!localStorage.getItem("classroom_token");
+
+  // 설정 저장
+  const saveNotificationTime = (time: number) => {
+    setNotificationTime(time);
+    localStorage.setItem('notificationTime', time.toString());
+  };
+
+  const saveNotificationEmail = (email: string) => {
+    setNotificationEmail(email);
+    localStorage.setItem('notificationEmail', email);
+  };
+
+  // 데일리 알림 테스트
+  const testDailyNotification = async () => {
+    try {
+      // 현재 사용자 이메일 가져오기
+      const { data: { user } } = await import('@supabase/supabase-js').then(({ createClient }) => {
+        const supabase = createClient(
+          import.meta.env.VITE_SUPABASE_URL!,
+          import.meta.env.VITE_SUPABASE_ANON_KEY!
+        );
+        return supabase.auth.getUser();
+      });
+
+      if (!user?.email) {
+        alert("로그인이 필요합니다.");
+        return;
+      }
+
+      // Google SSO의 경우 실제 Gmail 주소를 사용
+      let recipientEmail = user.email;
+      if (user.app_metadata?.provider === 'google' && user.identities) {
+        const googleIdentity = user.identities.find(identity => identity.provider === 'google');
+        if (googleIdentity?.identity_data?.email) {
+          recipientEmail = googleIdentity.identity_data.email;
+        }
+      }
+
+      // 사용자가 설정한 이메일 주소가 있으면 우선 사용
+      if (notificationEmail && notificationEmail.trim()) {
+        recipientEmail = notificationEmail.trim();
+        console.log('사용자 설정 이메일 사용:', recipientEmail);
+      } else {
+        console.log('사용자 설정 이메일 없음, 기본 이메일 사용:', recipientEmail);
+      }
+
+      const result = await sendDailyDeadlineNotification(recipientEmail, assignments);
+      alert(`테스트 이메일이 ${recipientEmail}로 전송되었습니다! 스팸 폴더도 확인해보세요.`);
+      console.log("테스트 결과:", result);
+      console.log("수신자 이메일:", recipientEmail);
+    } catch (error) {
+      alert("테스트 이메일 전송 실패: " + error);
+      console.error("테스트 실패:", error);
+    }
+  };
 
   const connectClassroom = () => {
     const clientId = "288270020961-3bpsghmq11ffj2eep20u6s9uh37vhemo.apps.googleusercontent.com";
     const redirectUri = "http://localhost:5173/classroom/callback";
 
     const scope = [
+      "openid",
+      "email",
+      "profile",
       "https://www.googleapis.com/auth/classroom.courses.readonly",
-      "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
-      "https://www.googleapis.com/auth/classroom.coursework.students.readonly",
+      "https://www.googleapis.com/auth/classroom.coursework.me", 
+      "https://www.googleapis.com/auth/classroom.coursework.students" 
     ].join(" ");
 
     const url =
@@ -71,12 +221,51 @@ export default function SettingsPage() {
           value={deadlineAlert}
           onChange={setDeadlineAlert}
         />
+        <SelectItem
+          title="수행평가 알림 시간"
+          desc="수행평가 관련 알림을 받을 시간을 선택하세요"
+          value={notificationTime}
+          onChange={saveNotificationTime}
+          options={Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${i}시` }))}
+        />
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+          <div>
+            <strong>알림 이메일 주소</strong>
+            <p style={{ fontSize: 13, color: "#666" }}>알림을 받을 이메일 주소를 입력하세요</p>
+          </div>
+          <input
+            type="email"
+            value={notificationEmail}
+            onChange={(e) => saveNotificationEmail(e.target.value)}
+            placeholder="example@gmail.com"
+            style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #ccc", width: 200 }}
+          />
+        </div>
         <ToggleItem
           title="이메일 알림"
           desc="중요한 알림을 이메일로 받습니다"
           value={emailAlert}
           onChange={setEmailAlert}
         />
+        <div style={{ marginTop: 16, padding: 12, backgroundColor: "#f8f9fa", borderRadius: 6 }}>
+          <strong>데일리 알림 테스트</strong>
+          <p style={{ fontSize: 13, color: "#666", margin: "4px 0" }}>
+            현재 설정된 시간에 관계없이 데일리 알림을 테스트합니다
+          </p>
+          <button 
+            onClick={testDailyNotification}
+            style={{ 
+              padding: "6px 12px", 
+              backgroundColor: "#007bff", 
+              color: "white", 
+              border: "none", 
+              borderRadius: 4,
+              cursor: "pointer"
+            }}
+          >
+            테스트 이메일 보내기
+          </button>
+        </div>
       </Section>
 
       {/* ===== 보안 설정 ===== */}
@@ -204,6 +393,40 @@ function RowItem({
         <p style={{ fontSize: 13, color: "#666" }}>{desc}</p>
       </div>
       <button>{button}</button>
+    </div>
+  );
+}
+
+function SelectItem({
+  title,
+  desc,
+  value,
+  onChange,
+  options,
+}: {
+  title: string;
+  desc: string;
+  value: number;
+  onChange: (v: number) => void;
+  options: { value: number; label: string }[];
+}) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+      <div>
+        <strong>{title}</strong>
+        <p style={{ fontSize: 13, color: "#666" }}>{desc}</p>
+      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #ccc" }}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

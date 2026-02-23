@@ -1,6 +1,11 @@
 import Card from "../common/Card";
+import type { Assignment } from "../../types/assignment";
 
-export default function CalendarCard() {
+interface Props {
+  assignments: Assignment[];
+}
+
+export default function CalendarCard({ assignments: _assignments }: Props) {
   return (
     <Card>
       <h3>수행평가 캘린더</h3>
