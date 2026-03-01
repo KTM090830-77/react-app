@@ -4,19 +4,19 @@ import { sendDailyDeadlineNotification } from "../lib/email";
 import type { Assignment } from "../types/assignment";
 
 export default function SettingsPage() {
-  const [submitAlert, setSubmitAlert] = useState(true);
-  const [deadlineAlert, setDeadlineAlert] = useState(true);
-  const [emailAlert, setEmailAlert] = useState(false);
+  const [submitAlert, setSubmitAlert] = useState(() => {
+    const saved = localStorage.getItem('submitAlert');
+    return saved === null ? true : saved === 'true';
+  });
+  const [deadlineAlert, setDeadlineAlert] = useState(() => {
+    const saved = localStorage.getItem('deadlineAlert');
+    return saved === null ? true : saved === 'true';
+  });
+  const [emailAlert, setEmailAlert] = useState(() => {
+    const saved = localStorage.getItem('emailAlert');
+    return saved === null ? false : saved === 'true';
+  });
 
-  // load persisted toggle settings
-  useEffect(() => {
-    const savedSubmit = localStorage.getItem('submitAlert');
-    if (savedSubmit !== null) setSubmitAlert(savedSubmit === 'true');
-    const savedDeadline = localStorage.getItem('deadlineAlert');
-    if (savedDeadline !== null) setDeadlineAlert(savedDeadline === 'true');
-    const savedEmail = localStorage.getItem('emailAlert');
-    if (savedEmail !== null) setEmailAlert(savedEmail === 'true');
-  }, []);
 
   // persist toggles when they change
   useEffect(() => {
@@ -138,6 +138,12 @@ export default function SettingsPage() {
   // 데일리 알림 테스트
   const testDailyNotification = async () => {
     try {
+      // 이메일 알림이 꺼져 있으면 테스트도 제한
+      if (!localStorage.getItem('emailAlert') || localStorage.getItem('emailAlert') === 'false') {
+        alert('이메일 알림이 비활성화되어 있습니다. 설정에서 활성화하세요.');
+        return;
+      }
+
       // 현재 사용자 이메일 가져오기
       const { data: { user } } = await import('@supabase/supabase-js').then(({ createClient }) => {
         const supabase = createClient(
@@ -242,7 +248,7 @@ export default function SettingsPage() {
         />
         <ToggleItem
           title="마감일 알림"
-          desc="수행평가 마감 3일 전 알림을 받습니다"
+          desc="마감일 하루 전, 설정된 시간에 이메일로 알림을 받습니다"
           value={deadlineAlert}
           onChange={setDeadlineAlert}
         />
