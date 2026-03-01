@@ -34,11 +34,11 @@ export default function ToSubmitList({ assignments }: Props) {
               <span
                 style={{
                   fontSize: "12px",
-                  color: assignment.dDay === 0 || assignment.dDay === 1 ? "red" : assignment.dDay <= 3 ? "orange" : "inherit",
+                  color: assignment.dDay <= 0 || assignment.dDay === 1 ? "red" : assignment.dDay <= 3 ? "orange" : "inherit",
                   fontWeight: "bold",
                 }}
               >
-                {assignment.dDay === 0 ? "제출 임박" : `D-${assignment.dDay}`}
+                {assignment.dDay === 0 ? "제출 임박" : assignment.dDay > 0 ? `D-${assignment.dDay}` : "기한 지남"}
               </span>
             </div>
           ))}

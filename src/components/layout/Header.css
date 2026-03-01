@@ -1,41 +1,93 @@
 .header {
-  background: #2563eb;
-  color: white;
+  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-md);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .header-inner {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 16px 24px;
+  padding: var(--space-4) var(--space-6);
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
 .logo {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0;
+  letter-spacing: -0.5px;
+  transition: opacity var(--transition-base);
 }
 
-.nav a {
-  margin-left: 24px;
-  opacity: 0.8;
+.logo:hover {
+  opacity: 0.9;
 }
 
-.nav a.active {
-  opacity: 1;
-  font-weight: 600;
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
 }
-.logout-btn {
-  margin-left: auto;
+
+.nav button {
   background: transparent;
-  border: 1px solid #ddd;
-  padding: 6px 12px;
-  border-radius: 6px;
+  border: none;
+  color: var(--text-inverse);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  opacity: 0.9;
+  transition: all var(--transition-base);
   cursor: pointer;
-  font-size: 14px;
+  position: relative;
+}
+
+.nav button:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nav button::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--text-inverse);
+  border-radius: var(--radius-full);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.nav button:hover::after {
+  opacity: 0.3;
+}
+
+.logout-btn {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.4) !important;
+  padding: var(--space-2) var(--space-4) !important;
+  border-radius: var(--radius-md) !important;
+  margin-left: auto !important;
+  color: var(--text-inverse) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-medium);
+  opacity: 0.9;
+  transition: all var(--transition-base);
 }
 
 .logout-btn:hover {
-  background: #f3f4f6;
+  background: rgba(255, 255, 255, 0.3) !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
+  opacity: 1;
 }

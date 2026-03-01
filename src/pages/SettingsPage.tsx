@@ -7,6 +7,27 @@ export default function SettingsPage() {
   const [submitAlert, setSubmitAlert] = useState(true);
   const [deadlineAlert, setDeadlineAlert] = useState(true);
   const [emailAlert, setEmailAlert] = useState(false);
+
+  // load persisted toggle settings
+  useEffect(() => {
+    const savedSubmit = localStorage.getItem('submitAlert');
+    if (savedSubmit !== null) setSubmitAlert(savedSubmit === 'true');
+    const savedDeadline = localStorage.getItem('deadlineAlert');
+    if (savedDeadline !== null) setDeadlineAlert(savedDeadline === 'true');
+    const savedEmail = localStorage.getItem('emailAlert');
+    if (savedEmail !== null) setEmailAlert(savedEmail === 'true');
+  }, []);
+
+  // persist toggles when they change
+  useEffect(() => {
+    localStorage.setItem('submitAlert', submitAlert.toString());
+  }, [submitAlert]);
+  useEffect(() => {
+    localStorage.setItem('deadlineAlert', deadlineAlert.toString());
+  }, [deadlineAlert]);
+  useEffect(() => {
+    localStorage.setItem('emailAlert', emailAlert.toString());
+  }, [emailAlert]);
   const [notificationTime, setNotificationTime] = useState(9); // 기본 9시
   const [notificationEmail, setNotificationEmail] = useState(""); // 알림 이메일 주소
   const [darkMode, setDarkMode] = useState(false);
@@ -28,6 +49,7 @@ export default function SettingsPage() {
         const workResult = await fetchCourseWork(token, course.id);
         const works = workResult.courseWork ?? [];
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const assignmentPromises = works.map(async (w: any) => {
           let dueAt = "마감일 없음";
           let dDay = 0;
@@ -165,9 +187,12 @@ export default function SettingsPage() {
       "openid",
       "email",
       "profile",
+      // classroom scopes
       "https://www.googleapis.com/auth/classroom.courses.readonly",
-      "https://www.googleapis.com/auth/classroom.coursework.me", 
-      "https://www.googleapis.com/auth/classroom.coursework.students" 
+      "https://www.googleapis.com/auth/classroom.coursework.me",
+      "https://www.googleapis.com/auth/classroom.coursework.students",
+      // drive scope for file upload
+      "https://www.googleapis.com/auth/drive.file"
     ].join(" ");
 
     const url =
@@ -196,8 +221,8 @@ export default function SettingsPage() {
             <strong>연결 상태</strong>
             <p style={{ fontSize: 13, color: "#666" }}>
               {classroomConnected
-                ? "Classroom이 연결되어 있습니다"
-                : "아직 Classroom이 연결되지 않았습니다"}
+                ? "Classroom 및 Drive 권한이 연결되어 있습니다"
+                : "아직 Classroom/Drive가 연결되지 않았습니다"}
             </p>
           </div>
 

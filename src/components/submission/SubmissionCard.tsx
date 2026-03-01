@@ -4,6 +4,7 @@ import { sendAssignmentNotification } from "../../lib/email";
 import { supabase } from "../../lib/supabase";
 import { formatUtcToKst } from "../../utils/data";
 import type { Assignment, Attachment } from "../../types/assignment";
+import { initGapiClient, uploadFileWithGapi, addAttachmentsViaGapi } from "../../lib/gapi";
 
 interface Props {
   assignment: Assignment;
@@ -18,16 +19,14 @@ export default function SubmissionCard({ assignment, onSubmissionSuccess }: Prop
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 파일 첨부 클릭
   const handleAddAttachment = () => {
     fileInputRef.current?.click();
   };
 
-  // 파일 선택 시 처리
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || !assignment.courseId || !assignment.submissionId) {
-      setError("파일을 선택할 수 없습니다.");
+    if (!files || files.length === 0 || !assignment.courseId || !assignment.submissionId) {
+      setError("파일을 선택할 수 없거나 과제 정보가 부족합니다.");
       return;
     }
 
@@ -35,57 +34,54 @@ export default function SubmissionCard({ assignment, onSubmissionSuccess }: Prop
     setError(null);
 
     try {
-      const token = getValidToken();
-      if (!token) throw new Error("인증 토큰이 없습니다.");
+      let token = getValidToken();
+      if (!token) {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.provider_token || null;
+      }
+      if (!token) throw new Error("Google 인증 토큰이 없습니다. 다시 로그인해 주세요.");
 
-      // 실제 구현에서는 Google Drive API를 사용하여 파일을 업로드해야 합니다
-      // 현재는 모의 구현으로 대체합니다
+      await initGapiClient(token as string);
+
       const fileArray = Array.from(files);
-      
-      // 파일 업로드 로직 (실제로는 Google Drive API 필요)
-      console.log("파일 업로드:", fileArray);
-      
-      // modifyAttachments API 호출
-      const newAttachments: Attachment[] = fileArray.map((file, index) => ({
-        driveFile: {
+      const newlyAdded: Attachment[] = [];
+
+      for (const file of fileArray) {
+        // 1. 드라이브 업로드
+        const uploadResult = await uploadFileWithGapi(file);
+        
+        // 2. 클래스룸에 즉시 첨부
+        const attachmentObj: Attachment = {
           driveFile: {
-            id: `file-${Date.now()}-${index}`,
-            title: file.name,
+            driveFile: { id: uploadResult.id, title: uploadResult.title },
+            shareMode: "OWNER",
           },
-          shareMode: "OWNER",
-        },
-      }));
+        };
 
-      await modifyAttachments(
-        token,
-        assignment.courseId,
-        assignment.id,
-        assignment.submissionId,
-        newAttachments
-      );
+        await addAttachmentsViaGapi(
+          assignment.courseId,
+          assignment.id, 
+          assignment.submissionId,
+          [attachmentObj]
+        );
 
-      // 첨부파일 목록 업데이트
-      setAttachments((prev) => [...prev, ...newAttachments]);
-      setError(null);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "파일 업로드 실패";
-      setError(errorMessage);
+        newlyAdded.push(attachmentObj);
+      }
+
+      setAttachments((prev) => [...prev, ...newlyAdded]);
+    } catch (err: any) {
+      setError(err.message || "파일 업로드 실패");
       console.error("파일 업로드 오류:", err);
     } finally {
       setLoading(false);
-      // 파일 입력 초기화
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  // 첨부파일 삭제
   const handleRemoveAttachment = (index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // 제출하기
   const handleSubmit = async () => {
     if (!assignment.courseId || !assignment.submissionId) {
       setError("제출 정보가 없습니다.");
@@ -96,21 +92,13 @@ export default function SubmissionCard({ assignment, onSubmissionSuccess }: Prop
     setError(null);
 
     try {
-      const token = getValidToken();
+      let token = getValidToken();
+      if (!token) {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.provider_token || null;
+      }
       if (!token) throw new Error("인증 토큰이 없습니다.");
 
-      // 먼저 첨부파일이 있으면 추가
-      if (attachments.length > 0) {
-        await modifyAttachments(
-          token,
-          assignment.courseId,
-          assignment.id,
-          assignment.submissionId,
-          attachments
-        );
-      }
-
-      // 과제 제출
       await turnIn(
         token,
         assignment.courseId,
@@ -118,23 +106,18 @@ export default function SubmissionCard({ assignment, onSubmissionSuccess }: Prop
         assignment.submissionId
       );
 
-      // 제출 성공 알림 보내기
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user?.email) {
+          // sendAssignmentNotification now checks submit/email toggles internally
           await sendAssignmentNotification(user.email, assignment.title);
         }
-      } catch (notificationError) {
-        console.warn("알림 전송 실패:", notificationError);
-      }
+      } catch (e) { console.warn("알림 실패:", e); }
 
-      setError(null);
       setAttachments([]);
       onSubmissionSuccess?.();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "제출 실패";
-      setError(errorMessage);
-      console.error("제출 오류:", err);
+    } catch (err: any) {
+      setError(err.message || "제출 실패");
     } finally {
       setSubmitting(false);
     }
@@ -158,7 +141,6 @@ export default function SubmissionCard({ assignment, onSubmissionSuccess }: Prop
 
       <p className="description">{assignment.description}</p>
 
-      {/* 첨부파일 섹션 (미제출인 경우만 표시) */}
       {!isSubmitted && (
         <div className="attachment-section">
           <div className="attachment-header">
@@ -172,7 +154,6 @@ export default function SubmissionCard({ assignment, onSubmissionSuccess }: Prop
             </button>
           </div>
 
-          {/* 첨부파일 목록 */}
           {attachments.length > 0 && (
             <div className="attachment-list">
               {attachments.map((attachment, index) => (
@@ -193,7 +174,6 @@ export default function SubmissionCard({ assignment, onSubmissionSuccess }: Prop
             </div>
           )}
 
-          {/* 파일 입력 (숨김) */}
           <input
             ref={fileInputRef}
             type="file"
@@ -202,7 +182,6 @@ export default function SubmissionCard({ assignment, onSubmissionSuccess }: Prop
             multiple
           />
 
-          {/* 에러 메시지 */}
           {error && <div className="error-message">{error}</div>}
         </div>
       )}
@@ -220,14 +199,14 @@ export default function SubmissionCard({ assignment, onSubmissionSuccess }: Prop
               className="d-day"
               style={{
                 color:
-                  assignment.dDay === 0 || assignment.dDay === 1
+                  assignment.dDay <= 0 || assignment.dDay === 1
                     ? "red"
                     : assignment.dDay <= 3
                     ? "orange"
                     : "inherit",
               }}
             >
-              {assignment.dDay === 0 ? "제출 임박" : `D-${assignment.dDay}`}
+              {assignment.dDay === 0 ? "제출 임박" : assignment.dDay > 0 ? `D-${assignment.dDay}` : "기한 지남"}
             </span>
           )}
           {isSubmitted && (

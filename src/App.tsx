@@ -7,6 +7,7 @@ import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import SubmissionPage from "./pages/SubmissionPage";
 import SettingsPage from "./pages/SettingsPage";
+import "./styles/global.css";
 
 export default function App() {
   return (

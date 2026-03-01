@@ -25,8 +25,27 @@ export const getSmtpConfig = (): SmtpConfig => {
   };
 };
 
+// helper functions for checking user settings which live in localStorage
+export const isSubmitAlertEnabled = (): boolean => {
+  const v = localStorage.getItem('submitAlert');
+  return v === null ? true : v === 'true';
+};
+export const isDeadlineAlertEnabled = (): boolean => {
+  const v = localStorage.getItem('deadlineAlert');
+  return v === null ? true : v === 'true';
+};
+export const isEmailAlertEnabled = (): boolean => {
+  const v = localStorage.getItem('emailAlert');
+  return v === null ? true : v === 'true';
+};
+
 // 과제 제출 알림 전송(수행평가 제출 시)
 export const sendAssignmentNotification = async (recipientEmail: string, assignmentTitle: string) => {
+  if (!isSubmitAlertEnabled() || !isEmailAlertEnabled()) {
+    console.log('제출 알림이 비활성화되어 있습니다. 이메일은 전송되지 않습니다.');
+    return { success: false, message: 'submit alerts disabled' };
+  }
+
   try {
     const templateParams = {
       to_email: recipientEmail,
@@ -130,6 +149,12 @@ export const checkAndSendDailyNotification = async (assignments: Array<{
   dDay: number;
 }>) => {
   try {
+    // respect user settings before doing anything
+    if (!isEmailAlertEnabled() || !isDeadlineAlertEnabled()) {
+      console.log('데일리 알림 또는 이메일 알림이 비활성화되어 있습니다. 건너뜁니다.');
+      return;
+    }
+
     // Supabase에서 사용자 이메일 가져오기
     const { data: { user } } = await import('@supabase/supabase-js').then(({ createClient }) => {
       const supabase = createClient(
